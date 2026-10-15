@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Split — Smart Bill &amp; Tip Calculator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            ink: "#07141b",
+            card: "#f7f4ee",
+            mint: "#0d9488",
+            mintSoft: "#ccfbf1",
+            sage: "#9ae6b4",
+          },
+          fontFamily: {
+            sans: ["ui-sans-serif", "system-ui", "Segoe UI", "Inter", "sans-serif"],
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    @keyframes flash {
+      0% { transform: translateY(4px); opacity: 0.45; }
+      100% { transform: translateY(0); opacity: 1; }
+    }
+    .flash { animation: flash 220ms ease-out; }
+    input[type="number"]::-webkit-outer-spin-button,
+    input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+  </style>
+</head>
+<body class="min-h-screen bg-ink text-slate-100 antialiased">
+  <div class="pointer-events-none fixed inset-0 overflow-hidden">
+    <div class="absolute -top-24 -right-16 h-72 w-72 rounded-full bg-teal-500/20 blur-3xl"></div>
+    <div class="absolute bottom-0 -left-10 h-80 w-80 rounded-full bg-emerald-400/10 blur-3xl"></div>
+  </div>
+
+  <main class="relative mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-12">
+    <header class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-teal-300">Smart split</p>
+        <h1 class="mt-1 text-3xl font-semibold tracking-tight sm:text-4xl">Bill &amp; tip calculator</h1>
+        <p class="mt-2 max-w-xl text-sm text-slate-400">Split dinner or drinks evenly. Tip, tax, and who has already paid — in one card.</p>
+      </div>
+      <div class="inline-flex self-start rounded-full bg-white/10 p-1 ring-1 ring-white/10" role="group" aria-label="Currency">
+        <button type="button" id="btn-usd" class="currency-btn rounded-full px-4 py-1.5 text-sm font-medium">USD $</button>
+        <button type="button" id="btn-idr" class="currency-btn rounded-full px-4 py-1.5 text-sm font-medium">IDR Rp</button>
+      </div>
+    </header>
+
+    <div class="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+      <section class="rounded-3xl bg-card p-5 text-ink shadow-2xl shadow-black/40 sm:p-7">
+        <label class="block text-sm font-medium text-slate-600" for="bill">Bill amount</label>
+        <div class="relative mt-2">
+          <span id="currency-prefix" class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg font-semibold text-slate-400">$</span>
+          <input
+            id="bill"
+            type="number"
+            inputmode="decimal"
+            min="0"
+            step="0.01"
+            placeholder="0.00"
+            class="w-full rounded-2xl border border-slate-200 bg-white py-4 pl-12 pr-4 text-3xl font-semibold tabular-nums tracking-tight text-ink outline-none ring-mint/0 transition focus:border-mint focus:ring-4 focus:ring-mint/20"
+          />
+        </div>
+
+        <div class="mt-6">
+          <div class="flex items-center justify-between">
+            <p class="text-sm font-medium text-slate-600">Tip</p>
+            <span id="tip-label" class="text-sm font-semibold text-mint">15%</span>
+          </div>
+          <div class="mt-2 grid grid-cols-4 gap-2" id="tip-presets">
+            <button type="button" data-tip="0" class="tip-btn rounded-xl bg-white px-2 py-2.5 text-sm font-semibold ring-1 ring-slate-200 transition hover:bg-mintSoft">0%</button>
+            <button type="button" data-tip="10" class="tip-btn rounded-xl bg-white px-2 py-2.5 text-sm font-semibold ring-1 ring-slate-200 transition hover:bg-mintSoft">10%</button>
+            <button type="button" data-tip="15" class="tip-btn rounded-xl bg-white px-2 py-2.5 text-sm font-semibold ring-1 ring-slate-200 transition hover:bg-mintSoft">15%</button>
+            <button type="button" data-tip="20" class="tip-btn rounded-xl bg-white px-2 py-2.5 text-sm font-semibold ring-1 ring-slate-200 transition hover:bg-mintSoft">20%</button>
+          </div>
+          <label class="mt-3 flex items-center gap-3 rounded-xl bg-white px-3 py-2 ring-1 ring-slate-200">
+            <span class="text-sm text-slate-500">Custom</span>
+            <input id="tip-custom" type="number" min="0" max="100" step="0.1" placeholder="e.g. 18" class="w-full bg-transparent text-right text-sm font-semibold tabular-nums outline-none" />
+            <span class="text-sm text-slate-400">%</span>
+          </label>
+        </div>
+
+        <div class="mt-6 rounded-2xl bg-white p-4 ring-1 ring-slate-200">
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <p class="text-sm font-medium text-slate-700">Tax / service charge</p>
+              <p class="text-xs text-slate-400">Applied to the bill, separate from tip</p>
+            </div>
+            <button type="button" id="tax-toggle" class="relative h-7 w-12 rounded-full bg-slate-200 transition" role="switch" aria-checked="false" aria-label="Enable tax">
+              <span id="tax-knob" class="absolute left-1 top-1 h-5 w-5 rounded-full bg-white shadow transition"></span>
+            </button>
+          </div>
+          <div id="tax-row" class="mt-3 hidden">
+            <label class="flex items-center gap-3">
+              <span class="text-sm text-slate-500">Rate</span>
+              <input id="tax-percent" type="number" min="0" max="100" step="0.1" value="10" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-right text-sm font-semibold tabular-nums outline-none focus:border-mint" />
+              <span class="text-sm text-slate-400">%</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="mt-6 flex items-center justify-between rounded-2xl bg-white px-4 py-3 ring-1 ring-slate-200">
+          <p class="text-sm font-medium text-slate-700">Number of people</p>
+          <div class="flex items-center gap-3">
+            <button type="button" id="people-dec" class="grid h-10 w-10 place-items-center rounded-full bg-ink text-lg font-semibold text-white transition hover:bg-mint" aria-label="Decrease people">−</button>
+            <span id="people-count" class="w-8 text-center text-xl font-semibold tabular-nums">2</span>
+            <button type="button" id="people-inc" class="grid h-10 w-10 place-items-center rounded-full bg-ink text-lg font-semibold text-white transition hover:bg-mint" aria-label="Increase people">+</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="flex flex-col gap-4">
+        <div class="rounded-3xl bg-gradient-to-br from-teal-400 to-emerald-600 p-6 text-ink shadow-2xl shadow-teal-900/40 sm:p-7">
+          <p class="text-sm font-medium text-ink/70">Each person pays</p>
+          <p id="per-person" class="mt-1 text-4xl font-semibold tabular-nums tracking-tight sm:text-5xl">$0.00</p>
+          <p class="mt-2 text-sm text-ink/70">Even split of bill + tip + tax</p>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div class="rounded-2xl bg-white/10 p-4 ring-1 ring-white/10">
+            <p class="text-xs uppercase tracking-wide text-slate-400">Total tip</p>
+            <p id="total-tip" class="mt-1 text-xl font-semibold tabular-nums">$0.00</p>
+          </div>
+          <div class="rounded-2xl bg-white/10 p-4 ring-1 ring-white/10">
+            <p class="text-xs uppercase tracking-wide text-slate-400">Tip / person</p>
+            <p id="tip-person" class="mt-1 text-xl font-semibold tabular-nums">$0.00</p>
+          </div>
+          <div class="rounded-2xl bg-white/10 p-4 ring-1 ring-white/10">
+            <p class="text-xs uppercase tracking-wide text-slate-400">Tax</p>
+            <p id="tax-amount" class="mt-1 text-xl font-semibold tabular-nums">$0.00</p>
+          </div>
+          <div class="rounded-2xl bg-white/10 p-4 ring-1 ring-white/10">
+            <p class="text-xs uppercase tracking-wide text-slate-400">Grand total</p>
+            <p id="grand-total" class="mt-1 text-xl font-semibold tabular-nums">$0.00</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          id="btn-copy-summary"
+          class="flex items-center justify-center gap-2 rounded-2xl bg-white/10 px-4 py-3.5 text-sm font-semibold text-slate-100 ring-1 ring-white/15 transition hover:bg-white/20 active:scale-[0.98]"
+        >
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
+          <span id="copy-btn-text">Copy breakdown to clipboard</span>
+        </button>
+      </section>
+    </div>
+
+    <section class="mt-6 rounded-3xl bg-card p-5 text-ink shadow-2xl shadow-black/40 sm:p-7">
+      <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 class="text-lg font-semibold">Member checklist</h2>
+          <p id="paid-progress" class="text-sm text-slate-500">0 of 0 paid</p>
+        </div>
+        <form id="member-form" class="flex w-full gap-2 sm:w-auto">
+          <input id="member-name" type="text" maxlength="40" placeholder="Add a name" class="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-mint sm:w-56" />
+          <button type="submit" class="rounded-xl bg-ink px-4 py-2 text-sm font-semibold text-white transition hover:bg-mint">Add</button>
+        </form>
+      </div>
+      <ul id="member-list" class="mt-4 space-y-2"></ul>
+      <p id="member-empty" class="mt-4 text-sm text-slate-400">Add friends to track who has paid their share.</p>
+    </section>
+  </main>
+
+  <script>
+    const STORAGE_KEY = "smart-split-members-v1";
+    const CURRENCIES = {
+      USD: { code: "USD", prefix: "$", decimals: 2, locale: "en-US" },
+      IDR: { code: "IDR", prefix: "Rp", decimals: 0, locale: "id-ID" },
+    };
+
+    const state = {
+      currency: "USD",
+      bill: "",
+      tipPercent: 15,
+      customTip: false,
+      taxOn: false,
+      taxPercent: 10,
+      people: 2,
+      members: [],
+    };
+
+    const els = {
+      bill: document.getElementById("bill"),
+      tipLabel: document.getElementById("tip-label"),
+      tipCustom: document.getElementById("tip-custom"),
+      taxToggle: document.getElementById("tax-toggle"),
+      taxKnob: document.getElementById("tax-knob"),
+      taxRow: document.getElementById("tax-row"),
+      taxPercent: document.getElementById("tax-percent"),
+      peopleCount: document.getElementById("people-count"),
+      prefix: document.getElementById("currency-prefix"),
+      perPerson: document.getElementById("per-person"),
+      totalTip: document.getElementById("total-tip"),
+      tipPerson: document.getElementById("tip-person"),
+      taxAmount: document.getElementById("tax-amount"),
+      grandTotal: document.getElementById("grand-total"),
+      memberForm: document.getElementById("member-form"),
+      memberName: document.getElementById("member-name"),
+      memberList: document.getElementById("member-list"),
+      memberEmpty: document.getElementById("member-empty"),
+      paidProgress: document.getElementById("paid-progress"),
+      btnUsd: document.getElementById("btn-usd"),
+      btnIdr: document.getElementById("btn-idr"),
+      btnCopy: document.getElementById("btn-copy-summary"),
+      copyBtnText: document.getElementById("copy-btn-text"),
+    };
+
+    function loadMembers() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) state.members = JSON.parse(raw);
+      } catch {
+        state.members = [];
+      }
+    }
+
+    function saveMembers() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state.members));
+    }
+
+    function toMinor(amount, decimals) {
+      if (!Number.isFinite(amount) || amount < 0) return 0;
+      const factor = 10 ** decimals;
+      return Math.round(amount * factor);
+    }
+
+    function fromMinor(minor, decimals) {
+      const factor = 10 ** decimals;
+      return minor / factor;
+    }
+
+    function formatMoney(minor) {
+      const cfg = CURRENCIES[state.currency];
+      const value = fromMinor(minor, cfg.decimals);
+      const formatted = new Intl.NumberFormat(cfg.locale, {
+        minimumFractionDigits: cfg.decimals,
+        maximumFractionDigits: cfg.decimals,
+      }).format(value);
+      return cfg.prefix === "Rp" ? `Rp ${formatted}` : `$${formatted}`;
+    }
+
+    function parseBill() {
+      const n = Number.parseFloat(els.bill.value);
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    }
+
+    function calculate() {
+      const cfg = CURRENCIES[state.currency];
+      const billMinor = toMinor(parseBill(), cfg.decimals);
+      const tipRate = Math.max(0, Number(state.tipPercent) || 0) / 100;
+      const taxRate = state.taxOn ? Math.max(0, Number(state.taxPercent) || 0) / 100 : 0;
+      const people = Math.max(1, state.people);
+
+      const tipMinor = Math.round(billMinor * tipRate);
+      const taxMinor = Math.round(billMinor * taxRate);
+      const grandMinor = billMinor + tipMinor + taxMinor;
+      const baseShare = Math.floor(grandMinor / people);
+      const leftover = grandMinor % people;
+      const perPersonMinor = baseShare + (leftover > 0 ? 1 : 0);
+      const tipPersonMinor = Math.floor(tipMinor / people);
+
+      return { tipMinor, taxMinor, grandMinor, perPersonMinor, tipPersonMinor, leftover };
+    }
+
+    function flash(el) {
+      el.classList.remove("flash");
+      void el.offsetWidth;
+      el.classList.add("flash");
+    }
+
+    function setText(el, text) {
+      if (el.textContent !== text) {
+        el.textContent = text;
+        flash(el);
+      }
+    }
+
+    function updateCurrencyButtons() {
+      const on = "bg-white text-ink shadow";
+      const off = "text-slate-300";
+      els.btnUsd.className = `currency-btn rounded-full px-4 py-1.5 text-sm font-medium ${state.currency === "USD" ? on : off}`;
+      els.btnIdr.className = `currency-btn rounded-full px-4 py-1.5 text-sm font-medium ${state.currency === "IDR" ? on : off}`;
+      const cfg = CURRENCIES[state.currency];
+      els.prefix.textContent = cfg.prefix;
+      els.bill.step = cfg.decimals === 0 ? "1" : "0.01";
+      els.bill.placeholder = cfg.decimals === 0 ? "0" : "0.00";
+    }
+
+    function updateTipButtons() {
+      document.querySelectorAll(".tip-btn").forEach((btn) => {
+        const active = !state.customTip && Number(btn.dataset.tip) === Number(state.tipPercent);
+        btn.className = `tip-btn rounded-xl px-2 py-2.5 text-sm font-semibold ring-1 transition ${
+          active ? "bg-mint text-white ring-mint" : "bg-white ring-slate-200 hover:bg-mintSoft"
+        }`;
+      });
+      els.tipLabel.textContent = `${Number(state.tipPercent)}%`;
+    }
+
+    function updateTaxToggle() {
+      els.taxToggle.setAttribute("aria-checked", String(state.taxOn));
+      els.taxToggle.classList.toggle("bg-mint", state.taxOn);
+      els.taxToggle.classList.toggle("bg-slate-200", !state.taxOn);
+      els.taxKnob.classList.toggle("translate-x-5", state.taxOn);
+      els.taxRow.classList.toggle("hidden", !state.taxOn);
+    }
+
+    function renderMembers() {
+      const paid = state.members.filter((m) => m.paid).length;
+      els.paidProgress.textContent = `${paid} of ${state.members.length} paid`;
+      els.memberEmpty.classList.toggle("hidden", state.members.length > 0);
+      els.memberList.innerHTML = state.members
+        .map(
+          (m) => `
+        <li class="flex items-center gap-3 rounded-xl bg-white px-3 py-2 ring-1 ring-slate-200">
+          <input type="checkbox" data-id="${m.id}" class="member-paid h-4 w-4 accent-teal-600" ${m.paid ? "checked" : ""} aria-label="Mark ${escapeHtml(m.name)} as paid" />
+          <span class="flex-1 text-sm ${m.paid ? "text-slate-400 line-through" : "text-ink"}">${escapeHtml(m.name)}</span>
+          <button type="button" data-id="${m.id}" class="member-del text-xs font-medium text-slate-400 hover:text-rose-500">Remove</button>
+        </li>`
+        )
+        .join("");
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+
+    function render() {
+      updateCurrencyButtons();
+      updateTipButtons();
+      updateTaxToggle();
+      els.peopleCount.textContent = String(state.people);
+      const c = calculate();
+      setText(els.perPerson, formatMoney(c.perPersonMinor));
+      setText(els.totalTip, formatMoney(c.tipMinor));
+      setText(els.tipPerson, formatMoney(c.tipPersonMinor));
+      setText(els.taxAmount, formatMoney(c.taxMinor));
+      setText(els.grandTotal, formatMoney(c.grandMinor));
+      renderMembers();
+    }
+
+    els.bill.addEventListener("input", () => {
+      state.bill = els.bill.value;
+      render();
+    });
+
+    document.getElementById("tip-presets").addEventListener("click", (e) => {
+      const btn = e.target.closest(".tip-btn");
+      if (!btn) return;
+      state.customTip = false;
+      state.tipPercent = Number(btn.dataset.tip);
+      els.tipCustom.value = "";
+      render();
+    });
+
+    els.tipCustom.addEventListener("input", () => {
+      const n = Number.parseFloat(els.tipCustom.value);
+      if (Number.isFinite(n) && n >= 0) {
+        state.customTip = true;
+        state.tipPercent = n;
+      }
+      render();
+    });
+
+    els.taxToggle.addEventListener("click", () => {
+      state.taxOn = !state.taxOn;
+      render();
+    });
+
+    els.taxPercent.addEventListener("input", () => {
+      const n = Number.parseFloat(els.taxPercent.value);
+      state.taxPercent = Number.isFinite(n) && n >= 0 ? n : 0;
+      render();
+    });
+
+    document.getElementById("people-inc").addEventListener("click", () => {
+      state.people += 1;
+      render();
+    });
+
+    document.getElementById("people-dec").addEventListener("click", () => {
+      state.people = Math.max(1, state.people - 1);
+      render();
+    });
+
+    els.btnUsd.addEventListener("click", () => {
+      state.currency = "USD";
+      render();
+    });
+
+    els.btnIdr.addEventListener("click", () => {
+      state.currency = "IDR";
+      render();
+    });
+
+    els.memberForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const name = els.memberName.value.trim();
+      if (!name) return;
+      state.members.push({ id: crypto.randomUUID(), name, paid: false });
+      els.memberName.value = "";
+      saveMembers();
+      render();
+    });
+
+    els.memberList.addEventListener("change", (e) => {
+      const box = e.target.closest(".member-paid");
+      if (!box) return;
+      const member = state.members.find((m) => m.id === box.dataset.id);
+      if (member) member.paid = box.checked;
+      saveMembers();
+      render();
+    });
+
+    els.memberList.addEventListener("click", (e) => {
+      const btn = e.target.closest(".member-del");
+      if (!btn) return;
+      state.members = state.members.filter((m) => m.id !== btn.dataset.id);
+      saveMembers();
+      render();
+    });
+
+    els.btnCopy.addEventListener("click", async () => {
+      const c = calculate();
+      const cfg = CURRENCIES[state.currency];
+      const billFormatted = formatMoney(toMinor(parseBill(), cfg.decimals));
+      const lines = [
+        "🍽️ *Smart Split Bill Breakdown*",
+        `Bill Amount: ${billFormatted}`,
+        `Tip: ${formatMoney(c.tipMinor)} (${state.tipPercent}%)`,
+        state.taxOn ? `Tax: ${formatMoney(c.taxMinor)} (${state.taxPercent}%)` : null,
+        `Grand Total: ${formatMoney(c.grandMinor)}`,
+        `👉 *Each Person Pays: ${formatMoney(c.perPersonMinor)}* (${state.people} people)`,
+      ].filter(Boolean);
+
+      try {
+        await navigator.clipboard.writeText(lines.join("\n"));
+        const prev = els.copyBtnText.textContent;
+        els.copyBtnText.textContent = "Copied breakdown to clipboard! ✓";
+        setTimeout(() => {
+          els.copyBtnText.textContent = prev;
+        }, 2200);
+      } catch (err) {
+        console.error("Clipboard write error:", err);
+        els.copyBtnText.textContent = "Error copying text";
+      }
+    });
+
+    loadMembers();
+    render();
+  </script>
+</body>
+</html>
